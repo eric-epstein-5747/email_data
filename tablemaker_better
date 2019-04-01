@@ -1,0 +1,57 @@
+#!/usr/bin/python3
+# PURPOSE: To turn a certain huge, messy data file into a csv-format table 
+# with 3 columns: created, first_attempt, and final_attempt. These represent
+# times that a system created or tried to process something.
+#
+# USAGE: ./tablemaker_better data > data.csv
+#
+# BUGS: 
+# 1. Slurps the entire data file into python all at once, instead of reading 
+#    and matching line-by-line and building the csv table as we go. 
+# 2. Relatedly: will not work well for prohibitively large data files. 
+#    A future version will load the data into a SQL database and then create 
+#    the csv file from that. Or simply run statistical tests on the database!
+
+import re
+import sys
+
+f = open(sys.argv[1], "r")
+
+data = f.read()
+
+f.close()
+
+# Let's make our regexes readable. 
+timestamp=r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})'
+
+# Create 3 lists containing all the timestamps for creation, 
+# first attempt, and final attempt. 
+"""NOTE: Here is why the regex used below works: 
+(a) When there are capturing parentheses, re.findall() returns a list not of
+    all the substrings that match (as per usual) but rather only of the   
+    captured items from those substrings. So, we record all timestamps that 
+    are present for the desired variables. 
+(b) If a substring matches and the capturing group captures nothing for that 
+    match, then the empty string will show up in that spot in the list. Thus
+    re.findall(r'R(\w)?', 'Ronald Replica R.') returns ['o', 'e', '']. The 
+    point is, we record cases in which a value is missing."""
+
+creation_dates = re.findall(r'CREATED:\s*'+timestamp+'?', data, re.DOTALL)
+
+firstattempt_dates = re.findall(r'FIRSTATTEMPT:\s*'+timestamp+'?', data, re.DOTALL)
+
+finalattempt_dates = re.findall(r'FINALATTEMPT:\s*'+timestamp+'?', data, re.DOTALL)
+
+# To check that we have the same number of matches in each category, unhash the following:
+#print("# Number of creationdate matches is ", len(creation_dates))
+#print("# Number of firstattempt matches is ", len(firstattempt_dates))
+#print("# Number of finalattempt matches is ", len(finalattempt_dates))
+
+m = min(len(creation_dates),len(firstattempt_dates),len(finalattempt_dates))
+
+print("created","first_attempt","final_attempt",sep=',')
+
+for n in range(0, m): 	print(creation_dates[n],firstattempt_dates[n],finalattempt_dates[n],sep=',')
+
+
+	
