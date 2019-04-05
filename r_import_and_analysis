@@ -1,0 +1,129 @@
+# PURPOSE: To import a large amount of email data into R and  create
+# some graphs that reveal the distribution of email events over time.
+# USAGE: Written to be run in an R console. 
+# BUG: Will not work with larger datasets, since here we slurp the whole
+# thing into R.
+#
+# NOTE: Assumes that we have already created a .csv-format file containing
+# our data. This data is from an email system. "created" represents the time
+# that a task was created-- e.g., when an email was supposed to be sent off. 
+# "first_attempt" is the time that the system first attempted to process the 
+# task, and "final_attempt" is the time that the system successfully 
+# processed the task.
+
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(plot3D)
+library(rgl)
+library(ggplot2)
+library(tidyr)
+
+# Import the csv-format data file into R, creating a new dataframe.
+email_data <- read.csv("C:/Users/Eric Epstein/Documents/2018-2019 Year/Programming/Files Shared with Menasheh/data.csv")
+
+# Coerce the values to POSIX format. There are missing values in the
+# first_attempt column, so we need to be careful with that.
+email_data$created <- as.POSIXct(email_data$created)
+email_data$final_attempt <- as.POSIXct(email_data$final_attempt)
+email_data$first_attempt <- sub("^$", NA, email_data$first_attempt)
+email_data$first_attempt <- as.POSIXct(email_data$first_attempt, na.rm = TRUE)
+
+# Create histograms for each variable, playing with the bin size to see
+# which one gives the best view of our data. 
+hist(email_data$created, breaks = 50)
+hist(email_data$created, breaks = 75)
+hist(email_data$created, breaks = 100)
+
+hist(email_data$first_attempt, breaks = 50)
+hist(email_data$first_attempt, breaks = 75)
+hist(email_data$first_attempt, breaks = 100)
+
+hist(email_data$final_attempt, breaks = 50)
+hist(email_data$final_attempt, breaks = 75)
+hist(email_data$final_attempt, breaks = 100)
+
+# Create a new data frame whose rows represent the bins from email_data. 
+# For now we do this for just one variable, created; but we could do it
+# for each of them. This will show us the distribution of creation-events 
+# over time.
+tmp <- hist(email_data$created, breaks = 50)
+email_data_created_50 <- mutate(email_data, bin_number = 
+                        findInterval(email_data$created, tmp$breaks)) %>% 
+	group_by(bin_number) %>%
+		summarize(num_in_bin = n())
+
+# email_data_created_50 conveniently shrinks our original thousands of
+# lines of data into just 50. As long as what we care about is the 
+# distribution of creation events over time, this is fine. 
+# Listing the bin number is redundant (it's just the row number), and
+# we can easily get rid of that if we want: pipe the above to 
+# select(num_in_bin) 
+#
+# Originally, I wanted to create three 3D histograms. But this proved 
+# unworkable--none of R's packages produced a satisfactory 3D histogram. 
+# This is partly because the 3D graphics packages do not play well with 
+# POSIXct. And even when you coerce the data to numeric, the binning 
+# function does something weird. I'd like to avoid tinkering with the 
+# settings on the binning function, so I'll just make scatterplots. This 
+# will suffice to illustrate some of the trends that we might wish to 
+# examine. 
+
+# We want to create a variety of scatterplots, comparing the creation time,
+# time of first processing attempt, and time of final processing attempt.
+# We will start with 2D scatterplots and then make a 3D scatterplot. 
+
+# First, create a numeric vector called duration_n, representing the total
+# processing time (final_attempt - created). Coerce it to numeric rather
+# than timediff: 
+duration_n <- (email_data$final_attempt - email_data$created) %>% 
+                as.numeric()
+ 
+# Then, create a version of email_data that contains a column for duration:
+email_data_full <- mutate(email_data, duration = duration_n)
+
+# Then, compare the columns of email_data_full using some 2D scatterplots. 
+# We don't have to coerce the POSIXct columns here, since ggplot can handle
+# POSIXct.
+
+# Compare creation time to duration:
+ggplot(email_data_full, aes(x = created, y = duration), 
+       position_jitter(0.01)) + geom_point(shape = 1, alpha = 0.02, 
+                                           col = "blue") + 
+  labs(x = "Time of Creation", 
+       y = "Duration in Seconds (Final Attempt - Time of Creation)")
+
+# Compare time of successful processing (final attempt) to duration:
+ggplot(email_data_full, aes(x = final_attempt, y = duration), 
+       position_jitter(0.01)) + geom_point(shape = 1, alpha = 0.02, 
+                                           col = "blue") + 
+  labs(x = "Final Attempt: Time of Successful Processing", 
+       y = "Duration in Seconds (Final Attempt - Time of Creation)")
+
+# Make a long version of the above so we can facet on the type of timestamp. 
+email_data_long <- email_data_full %>%
+    mutate(id = seq.int(nrow(email_data_full))) %>%
+    gather(key = "timestamp_type", value = "value", -duration, -id) %>% 
+  select(id, timestamp_type, value, duration) %>% group_by(id)
+
+# Then make a scatterplot showing all three variables, faceted by type of 
+# timestamp: 
+ggplot(email_data_long, aes(x = value, y = duration)) + 
+  geom_point(shape = 1, alpha = 0.02, col = "blue") + 
+  labs(x = "", y = "Processing Time (seconds)") + facet_grid(. ~ timestamp_type)
+
+# To create 3D Scatterplots: 
+# Unfortunately, I couldn't find a tool that could create 3D scatterplots 
+# whose axes consist of POSIXct vectors. Therefore I had to coerce the 
+# desired columns to numeric: 
+created_numeric <- as.numeric(email_data$created)
+final_attempt_numeric <- as.numeric(final_attempt)
+
+# With that done, call plot3D to generate a rotatable plot, using plot3d 
+# from the rgl package. This plot compares creation time to final attempt:
+plot3d(created_numeric, final_attempt_numeric, 
+       email_data_proc_double$duration, 
+       xlab = "Time of Creation: ranging 8:00 to 13:15", 
+       ylab = "Time Successfully Processed, ranging 8:00 to 13:15", 
+       zlab = "Duration in Seconds (Time Successfully Processed Minus Creation Time)", 
+       col = "blue", size = 2, alpha = 0.4)
